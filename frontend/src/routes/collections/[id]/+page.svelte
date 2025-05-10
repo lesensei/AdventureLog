@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Adventure, Checklist, Collection, Lodging, Note, Transportation } from '$lib/types';
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount, onDestroy, tick } from 'svelte';
 	import type { PageData } from './$types';
 	import { marked } from 'marked'; // Import the markdown parser
 
@@ -39,6 +39,7 @@
 	import { goto } from '$app/navigation';
 	import LodgingModal from '$lib/components/LodgingModal.svelte';
 	import LodgingCard from '$lib/components/LodgingCard.svelte';
+	import maplibre from 'maplibre-gl';
 
 	export let data: PageData;
 	console.log(data);
@@ -237,12 +238,20 @@
 		end: string; // ISO date string
 	}> = [];
 
+	let bounds: maplibregl.LngLatBounds;
+	let map: maplibregl.Map;
+	let recoMap: maplibregl.Map;
+
 	$: {
 		// Reset ordered items
 		orderedItems = [];
+		bounds = new maplibre.LngLatBounds();
 
 		// Add Adventures (using visit dates)
 		adventures.forEach((adventure) => {
+			if (adventure.longitude && adventure.latitude) {
+				bounds.extend({lng: adventure.longitude, lat: adventure.latitude})
+			}
 			adventure.visits.forEach((visit) => {
 				orderedItems.push({
 					item: adventure,
@@ -255,6 +264,12 @@
 
 		// Add Transportation
 		transportations.forEach((transport) => {
+			if (transport.origin_longitude && transport.origin_latitude) {
+				bounds.extend({lng: transport.origin_longitude, lat: transport.origin_latitude})
+			}
+			if (transport.destination_longitude && transport.destination_latitude) {
+				bounds.extend({lng: transport.destination_longitude, lat: transport.destination_latitude})
+			}
 			if (transport.date) {
 				// Only add if date exists
 				orderedItems.push({
@@ -268,6 +283,9 @@
 
 		// Add Lodging
 		lodging.forEach((lodging) => {
+			if (lodging.longitude && lodging.latitude) {
+				bounds.extend({lng: lodging.longitude, lat: lodging.latitude})
+			}
 			if (lodging.check_in) {
 				// Only add if check_in exists
 				orderedItems.push({
@@ -290,6 +308,13 @@
 	$: {
 		numAdventures = adventures.length;
 		numVisited = adventures.filter((adventure) => adventure.is_visited).length;
+	}
+
+	$: {
+		tick().then(() => {
+			if (map && !bounds.isEmpty()) { map.fitBounds(bounds, {padding: 100})}
+			if (recoMap && !recomendationsBounds.isEmpty()) { console.log('Zooming reco map...');recoMap.fitBounds(recomendationsBounds, {padding: 100})}
+		});
 	}
 
 	let notFound: boolean = false;
@@ -452,6 +477,7 @@
 	}
 
 	let recomendationsData: any;
+	let recomendationsBounds: maplibregl.LngLatBounds;
 	let loadingRecomendations: boolean = false;
 	let recomendationsRange: number = 1600;
 	let recomendationType: string = 'tourism';
@@ -467,6 +493,10 @@
 		} else {
 			filteredRecomendations = recomendationsData;
 		}
+		recomendationsBounds = new maplibre.LngLatBounds();
+		filteredRecomendations?.forEach((reco) => {
+			recomendationsBounds.extend({lng: reco.longitude, lat: reco.latitude});
+		});
 		console.log(filteredRecomendations);
 		console.log(selectedRecomendationTag);
 	}
@@ -1220,6 +1250,8 @@
 					style="https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json"
 					class="aspect-[9/16] max-h-[70vh] sm:aspect-video sm:max-h-full w-full rounded-lg"
 					standardControls
+					bind:map
+					bounds={bounds}
 				>
 					{#each adventures as adventure}
 						{#if adventure.longitude && adventure.latitude}
@@ -1446,8 +1478,8 @@
 						class="aspect-[9/16] max-h-[70vh] sm:aspect-video sm:max
 						-h-full w-full rounded-lg"
 						standardControls
-						center={{ lng: recomendationsData[0].longitude, lat: recomendationsData[0].latitude }}
-						zoom={12}
+						bind:map={recoMap}
+						bounds={recomendationsBounds}
 					>
 						{#each filteredRecomendations as recomendation}
 							{#if recomendation.longitude && recomendation.latitude && recomendation.name}
