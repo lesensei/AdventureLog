@@ -48,6 +48,7 @@
 		"psl": "^1.15.0",
 		"qrcode": "^1.5.4",
 		"svelte-i18n": "^4.0.1",
-		"svelte-maplibre": "^0.9.8"
+		"svelte-maplibre": "^0.9.8",
+		"maplibre-gl": "^5.5.0"
 	}
 }
